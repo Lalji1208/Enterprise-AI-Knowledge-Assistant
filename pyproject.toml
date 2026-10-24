@@ -1,0 +1,20 @@
+[project]
+name = "enterprise-ai-knowledge-assistant"
+version = "0.1.0"
+description = "RAG assistant that answers questions from your documents with verifiable citations."
+requires-python = ">=3.11"
+# Dependencies live in requirements.txt (ranges) and requirements-lock.txt (exact).
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+# Ruff is pinned in requirements-lock.txt, so its default rule set - which this
+# project is checked against - does not change between machines or over time.
+extend-exclude = [".venv", "data"]
+
+[tool.coverage.run]
+source = ["api", "app", "config", "evaluation", "models", "rag", "services", "ui"]
+omit = ["ui/streamlit_app.py"]  # exercised through Streamlit's AppTest, not importable directly
+
+[tool.coverage.report]
+skip_empty = true

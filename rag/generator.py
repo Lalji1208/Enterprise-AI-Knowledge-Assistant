@@ -1,0 +1,121 @@
+"""Phases 8-9 - Answer generation with verified citations.
+
+Flow:
+  1. Retrieve chunks. If none are relevant, return "not found" WITHOUT calling
+     the LLM (no cost, and no chance to hallucinate).
+  2. Fit the best chunks into MAX_CONTEXT_CHARS and number them [1]..[n].
+  3. Ask the LLM for an answer that cites those numbers.
+  4. Verify the citations: drop numbers that point to no source, keep only
+     the sources actually cited, and warn when the answer cites nothing.
+
+Usage:
+    from rag.generator import AnswerGenerator
+    answer = AnswerGenerator.from_settings().answer("How many leave days do I get?")
+"""
+
+import re
+
+from config.settings import Settings, get_settings
+from models.answer import Answer, Citation
+from models.search import RetrievedChunk
+from rag.llm import LLMClient, get_llm
+from rag.prompts import NOT_FOUND_ANSWER, build_messages, select_context
+from rag.retriever import Retriever
+
+# [1], [2][3] and also [1, 3] / [1,2]
+_CITATION_GROUP = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
+
+
+def _normalized(text: str) -> str:
+    return re.sub(r"\W+", " ", text.lower()).strip()
+
+
+def is_not_found(text: str) -> bool:
+    return _normalized(NOT_FOUND_ANSWER) in _normalized(text)
+
+
+def extract_citation_numbers(text: str) -> list[int]:
+    """Citation numbers in order of first appearance."""
+    seen: list[int] = []
+    for group in _CITATION_GROUP.findall(text):
+        for n in (int(x) for x in group.split(",")):
+            if n not in seen:
+                seen.append(n)
+    return seen
+
+
+def remove_invalid_citations(text: str, valid: set[int]) -> str:
+    """Strip citation numbers that do not refer to a provided source."""
+    def fix(match: re.Match) -> str:
+        kept = [x.strip() for x in match.group(1).split(",") if int(x) in valid]
+        return f"[{', '.join(kept)}]" if kept else ""
+
+    return re.sub(r" +([.,;:!?])", r"\1", _CITATION_GROUP.sub(fix, text)).strip()
+
+
+def build_citations(numbers: list[int], context: list[RetrievedChunk]) -> list[Citation]:
+    return [
+        Citation(
+            number=n,
+            source=context[n - 1].chunk.source,
+            page_number=context[n - 1].chunk.page_number,
+            chunk_id=context[n - 1].chunk.chunk_id,
+            text=context[n - 1].chunk.text,
+            score=context[n - 1].score,
+            rerank_score=context[n - 1].rerank_score,
+        )
+        for n in sorted(numbers)
+    ]
+
+
+class AnswerGenerator:
+    def __init__(self, retriever: Retriever, llm: LLMClient, max_context_chars: int = 8000) -> None:
+        self.retriever = retriever
+        self.llm = llm
+        self.max_context_chars = max_context_chars
+
+    @classmethod
+    def from_settings(cls, settings: Settings | None = None) -> "AnswerGenerator":
+        settings = settings or get_settings()
+        return cls(Retriever.from_settings(settings), get_llm(), settings.max_context_chars)
+
+    def answer(self, question: str, **retrieve_kwargs) -> Answer:
+        """Answer from the indexed documents. Extra kwargs go to Retriever.retrieve
+        (top_k, sources, ...). Raises RetrievalError / LLMError on failure."""
+        question = question.strip()
+        results = self.retriever.retrieve(question, **retrieve_kwargs)
+        if not results:
+            return Answer(question=question, answer=NOT_FOUND_ANSWER, status="not_found")
+
+        context = select_context(results, self.max_context_chars)
+        reply = self.llm.complete(build_messages(question, context))
+        text = reply.text
+        warnings: list[str] = []
+        base = {
+            "question": question,
+            "model": reply.model,
+            "retrieved_count": len(results),
+            "prompt_tokens": reply.prompt_tokens,
+            "completion_tokens": reply.completion_tokens,
+        }
+
+        if not text:
+            return Answer(answer=NOT_FOUND_ANSWER, status="not_found",
+                          warnings=["The model returned an empty answer."], **base)
+        if is_not_found(text) and not extract_citation_numbers(text):
+            return Answer(answer=NOT_FOUND_ANSWER, status="not_found", **base)
+
+        valid = set(range(1, len(context) + 1))
+        cited = extract_citation_numbers(text)
+        invalid = [n for n in cited if n not in valid]
+        if invalid:
+            text = remove_invalid_citations(text, valid)
+            warnings.append(f"Removed citation(s) to non-existent sources: {invalid}.")
+        cited_valid = [n for n in cited if n in valid]
+        if not cited_valid:
+            warnings.append("The answer does not cite any source; verify it before relying on it.")
+        if reply.truncated:
+            warnings.append("The answer was cut off at the length limit (LLM_MAX_TOKENS).")
+
+        return Answer(answer=text, status="answered", warnings=warnings,
+                      citations=build_citations(cited_valid, context), **base)

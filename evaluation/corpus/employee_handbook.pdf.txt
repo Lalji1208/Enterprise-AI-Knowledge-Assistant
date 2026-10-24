@@ -1,0 +1,28 @@
+HEADER: Example Corp - Employee Handbook
+1. Introduction
+This handbook describes the main employment policies of Example Corp. It applies to all permanent and fixed-term employees. Where a local employment contract contains more favourable terms, the contract takes precedence.
+
+2. Working hours
+The standard working week is 40 hours, Monday to Friday. Core hours are from 10:00 to 15:00; outside core hours, employees may plan their time flexibly in agreement with their team. Overtime must be approved in advance by the line manager and is compensated with time off in lieu.
+=== PAGE ===
+3. Annual leave
+Full-time employees are entitled to 25 days of paid annual leave per calendar year. Part-time employees receive a pro-rata entitlement. Leave requests must be submitted in the HR portal at least two weeks before the first day of leave. Requests for more than ten consecutive working days require approval from the department head.
+
+Up to five unused leave days may be carried over into the next calendar year. Carried-over days expire if they are not taken by 31 March. Leave cannot be paid out except when employment ends.
+=== PAGE ===
+4. Sick leave
+Employees who are unable to work because of illness must inform their line manager before 09:30 on the first day of absence. A medical certificate is required from the fourth consecutive day of illness. Example Corp continues to pay full salary for up to 30 working days of sickness absence per calendar year.
+
+5. Parental leave
+The primary caregiver is entitled to 16 weeks of fully paid parental leave. The secondary caregiver is entitled to 4 weeks of fully paid parental leave, which must be taken within 12 months of the birth or adoption. Employees must notify HR of planned parental leave at least eight weeks in advance.
+=== PAGE ===
+6. Remote work
+Employees may work remotely for up to three days per week, subject to their role and line manager approval. Remote work from another country is limited to 20 working days per calendar year and must be registered with HR in advance for tax and insurance reasons. Employees working remotely must be reachable during core hours and must use the company VPN.
+
+Example Corp provides a one-time home office allowance of 300 EUR for equipment such as a chair or monitor.
+=== PAGE ===
+7. Training and development
+Each employee has an annual training budget of 1,500 EUR and three training days per year. Training requests are approved by the line manager.
+
+8. Equipment
+Company laptops remain the property of Example Corp and must be returned on the last working day. Lost or stolen equipment must be reported to the IT service desk immediately.

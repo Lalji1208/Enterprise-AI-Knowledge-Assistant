@@ -1,0 +1,18 @@
+HEADER: Example Corp - Travel and Expense Policy
+1. Submitting expense claims
+Expense claims must be submitted in the finance system within 30 days of the expense date. Claims submitted later than 90 days after the expense date will not be reimbursed. An itemised receipt is required for every expense above 25 EUR. Expenses are reimbursed with the next monthly salary payment.
+
+2. Approval
+Claims up to 500 EUR are approved by the line manager. Claims above 500 EUR additionally require approval from the finance department.
+=== PAGE ===
+3. Travel
+Business trips must be booked through the corporate travel portal. Flights shorter than six hours must be booked in economy class; for longer flights, premium economy is permitted. Rail travel in first class is allowed for journeys longer than two hours. Use of a private car is reimbursed at 0.30 EUR per kilometre.
+
+4. Accommodation
+Hotel costs are reimbursed up to 150 EUR per night, or up to 220 EUR per night in London, Paris and New York.
+=== PAGE ===
+5. Meals and entertainment
+The daily meal allowance during business travel is 60 EUR. Alcohol is not reimbursed, except as part of approved client entertainment. Client entertainment must be approved in advance and the names of all attendees must be listed on the claim.
+
+6. Corporate credit cards
+Employees who travel more than four times per year may request a corporate credit card. Personal expenses must never be paid with the corporate card.

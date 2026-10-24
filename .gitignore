@@ -1,0 +1,48 @@
+# ---------- Secrets (NEVER commit) ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# ---------- Virtual environments ----------
+.venv/
+venv/
+env/
+
+# ---------- Testing / tooling caches ----------
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---------- Runtime data (uploaded docs, indexes, DBs) ----------
+data/documents/*
+data/processed/*
+!data/documents/.gitkeep
+!data/processed/.gitkeep
+*.db
+*.sqlite3
+*.faiss
+*.index
+logs/
+
+# ---------- Model caches ----------
+.cache/
+models_cache/
+
+# ---------- Editors / OS ----------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---------- Evaluation raw data (regenerate with scripts/run_experiments.py) ----------
+evaluation/reports/*_records.json

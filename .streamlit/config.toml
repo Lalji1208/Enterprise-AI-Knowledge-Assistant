@@ -1,0 +1,13 @@
+# Streamlit settings for this project (used when running from the project root).
+
+[server]
+# Listen on this computer only. Streamlit's default exposes the UI - and therefore
+# your documents - to every device on the network.
+address = "127.0.0.1"
+port = 8501
+headless = true
+# Uploads go to the API, which enforces MAX_UPLOAD_SIZE_MB; this is the outer cap.
+maxUploadSize = 50
+
+[browser]
+gatherUsageStats = false

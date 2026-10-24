@@ -1,0 +1,7 @@
+# Store text files with LF line endings in the repository.
+# Prevents Windows (CRLF) vs Linux (LF) issues later in Docker and GitHub Actions.
+* text=auto eol=lf
+
+*.pdf binary
+*.png binary
+*.jpg binary

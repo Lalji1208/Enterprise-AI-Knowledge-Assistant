@@ -1,0 +1,26 @@
+# Never send secrets or local state into the image build.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.cache/
+
+# Runtime data is mounted as a volume, not baked into the image.
+data/
+
+.git/
+.github/
+.vscode/
+.idea/
+.claude/
