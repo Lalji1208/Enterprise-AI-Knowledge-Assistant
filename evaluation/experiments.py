@@ -70,7 +70,8 @@ def run(
         store, report = sync_directory(cfg, embedder, rebuild=True)
         build_seconds[(size, overlap)] = time.perf_counter() - start
         logger.info("chunks %s/%s: %d chunks", size, overlap, report.total_chunks)
-        records[(size, overlap)] = collect_records(store, embedder, items, reranker, POOL_SIZE)
+        records[(size, overlap)] = collect_records(store, embedder, items, reranker, POOL_SIZE,
+                                                   keyword_candidates=base.keyword_candidates)
 
     def split_of(recs: list[QuestionRecord], part: list[EvalItem]) -> list[QuestionRecord]:
         ids = {i.id for i in part}
@@ -91,6 +92,9 @@ def run(
             "bi_default": score_records(t, TOP_K, defaults["bi"]).as_dict(),
             "rerank_default": score_records(t, TOP_K, defaults["rerank_first_stage"],
                                             defaults["rerank"], use_rerank=True).as_dict(),
+            "hybrid_default": score_records(t, TOP_K, defaults["rerank_first_stage"],
+                                            defaults["rerank"], use_rerank=True,
+                                            use_keyword=True).as_dict(),
         })
 
     # --- 2. threshold tuning on dev, evaluated on test ---
@@ -102,22 +106,24 @@ def run(
     # First-stage cutoff tuned on dev with the rerank cutoff held at its default.
     fs_best_s, _, _fs_dev = sweep(dev_recs, FIRST_STAGE_THRESHOLDS, [defaults["rerank"]],
                                   use_rerank=True, top_k=TOP_K)[0]
+    # (min_score, rerank_min_score, use_rerank, use_keyword)
     variants = {
-        "bi_default": (defaults["bi"], None, False),
-        "bi_tuned": (bi_best_s, None, False),
-        "rerank_same_first_stage": (defaults["bi"], defaults["rerank"], True),
-        "rerank_default": (defaults["rerank_first_stage"], defaults["rerank"], True),
-        "rerank_tuned_first_stage": (fs_best_s, defaults["rerank"], True),
-        "rerank_tuned_both": (rr_best_s, rr_best_r, True),
+        "bi_default": (defaults["bi"], None, False, False),
+        "bi_tuned": (bi_best_s, None, False, False),
+        "rerank_same_first_stage": (defaults["bi"], defaults["rerank"], True, False),
+        "rerank_default": (defaults["rerank_first_stage"], defaults["rerank"], True, False),
+        "rerank_tuned_first_stage": (fs_best_s, defaults["rerank"], True, False),
+        "rerank_tuned_both": (rr_best_s, rr_best_r, True, False),
+        "hybrid_default": (defaults["rerank_first_stage"], defaults["rerank"], True, True),
     }
     tuning = {
         name: {
-            "min_score": s, "rerank_min_score": r, "use_rerank": use,
-            "dev": score_records(dev_recs, TOP_K, s, r, use).as_dict(),
-            "test": score_records(test_recs, TOP_K, s, r, use).as_dict(),
-            "test_failures": score_records(test_recs, TOP_K, s, r, use).failures,
+            "min_score": s, "rerank_min_score": r, "use_rerank": use, "use_keyword": kw,
+            "dev": score_records(dev_recs, TOP_K, s, r, use, use_keyword=kw).as_dict(),
+            "test": score_records(test_recs, TOP_K, s, r, use, use_keyword=kw).as_dict(),
+            "test_failures": score_records(test_recs, TOP_K, s, r, use, use_keyword=kw).failures,
         }
-        for name, (s, r, use) in variants.items()
+        for name, (s, r, use, kw) in variants.items()
     }
 
     result = {
@@ -156,15 +162,18 @@ def write_reports(result: dict, out_dir: Path = REPORTS_DIR) -> tuple[Path, Path
         "## 1. Chunking (test split)",
         "",
         ("| chunk / overlap | chunks | hit@1 | hit@5 | MRR | hit@5 bi-default | abstain bi-default "
-        "| hit@5 rerank-default | abstain rerank-default | balanced rerank-default |"),
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "| hit@5 rerank-default | abstain rerank-default | balanced rerank-default "
+         "| balanced hybrid |"),
+        "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for row in result["chunking"]:
         n, b, r = row["no_thresholds"], row["bi_default"], row["rerank_default"]
+        h = row["hybrid_default"]
         lines.append(
             f"| {row['chunk_size']} / {row['chunk_overlap']} | {row['chunks']} | {n['hit@1']:.2f} "
             f"| {n['hit@5']:.2f} | {n['mrr']:.2f} | {b['hit@5']:.2f} | {b['correct_abstention']:.2f} "
-            f"| {r['hit@5']:.2f} | {r['correct_abstention']:.2f} | {r['balanced']:.2f} |"
+            f"| {r['hit@5']:.2f} | {r['correct_abstention']:.2f} | {r['balanced']:.2f} "
+            f"| {h['balanced']:.2f} |"
         )
     lines += [
         "",

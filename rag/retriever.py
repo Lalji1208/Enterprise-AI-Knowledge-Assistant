@@ -9,6 +9,9 @@ Pipeline:
   4. If too few survive, fetch a larger candidate set and repeat.
   5. Optional (Phase 7): re-score ~20 candidates with a cross-encoder, drop those
      below `rerank_min_score`, and keep the best `top_k`.
+  6. Optional, with reranking (hybrid search): before step 5, add the best keyword
+     (BM25) matches to the candidates. They skip the similarity cutoff - their
+     similarity can be ~0 for an exact name - and the reranker decides.
 
 Usage:
     from rag.retriever import Retriever
@@ -25,6 +28,7 @@ import numpy as np
 from config.settings import Settings, get_settings
 from models.search import RetrievedChunk
 from rag.embedder import Embedder, get_embedder
+from rag.keyword_index import CachedKeywordIndex
 from rag.reranker import Reranker, get_reranker
 from rag.vector_store import VectorStore, VectorStoreError
 
@@ -69,6 +73,7 @@ class Retriever:
         reranker: Reranker | None = None,
         rerank_min_score: float | None = None,
         rerank_candidates: int = 20,
+        keyword_candidates: int = 0,
     ) -> None:
         if store.model_name != embedder.model_name:
             raise RetrievalError(
@@ -83,6 +88,9 @@ class Retriever:
         self.reranker = reranker
         self.rerank_min_score = rerank_min_score
         self.rerank_candidates = rerank_candidates
+        # Keyword hits are only safe with a reranker to judge them.
+        self.keyword_candidates = keyword_candidates if reranker is not None else 0
+        self._keyword = CachedKeywordIndex(store) if self.keyword_candidates else None
 
     @classmethod
     def from_settings(
@@ -116,6 +124,7 @@ class Retriever:
             reranker=reranker,
             rerank_min_score=settings.rerank_min_score,
             rerank_candidates=settings.rerank_candidates,
+            keyword_candidates=settings.keyword_candidates if settings.keyword_search_enabled else 0,
         )
 
     def retrieve(
@@ -154,8 +163,30 @@ class Retriever:
         # The per-document cap is applied after reranking, on the final order.
         pool_size = max(top_k, self.rerank_candidates)
         candidates = self._first_stage(query_vector, pool_size, min_score, allowed, None)
+        if self._keyword is not None:
+            candidates += self._keyword_candidates(query, query_vector, candidates, allowed)
         reranked = self.reranker.rerank(query, candidates, min_score=self.rerank_min_score)
         return _take(reranked, top_k, per_doc)
+
+    def _keyword_candidates(
+        self,
+        query: str,
+        query_vector: np.ndarray,
+        existing: list[RetrievedChunk],
+        allowed: set[str] | None,
+    ) -> list[RetrievedChunk]:
+        """Keyword (BM25) matches not already among the candidates, with their true
+        cosine similarity attached (it is shown to users and kept for analysis)."""
+        hits = self._keyword.get().search(query, self.keyword_candidates, allowed)
+        have = {c.chunk.chunk_id for c in existing}
+        new_chunks = [chunk for chunk, _ in hits if chunk.chunk_id not in have]
+        sims = self.store.similarities(query_vector, [c.chunk_id for c in new_chunks])
+        added: list[RetrievedChunk] = []
+        for chunk in new_chunks:
+            cand = RetrievedChunk(chunk=chunk, score=sims.get(chunk.chunk_id, 0.0))
+            if not _is_near_duplicate(cand, existing + added):
+                added.append(cand)
+        return added
 
     def _first_stage(
         self,

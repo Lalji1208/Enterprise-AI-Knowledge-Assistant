@@ -248,3 +248,87 @@ def test_real_llm_answers_with_citations_and_refuses_unknowns() -> None:
 
     ans = gen.answer("What is the company's stock ticker symbol?")
     assert ans.status == "not_found", ans
+
+
+# ---------- overview questions ("what is it about?") ----------
+
+from rag.generator import OVERVIEW_HINT, is_overview_question
+
+
+@pytest.mark.parametrize("question", [
+    "what is it about", "What is this paper about?", "what's the document about",
+    "Summarize the main contribution", "Give me a summary", "overview please",
+    "What are the key findings?", "what does this report say",
+])
+def test_overview_questions_are_detected(question: str) -> None:
+    assert is_overview_question(question)
+
+
+def test_no_evaluation_question_triggers_overview_mode() -> None:
+    """Overview mode must not change how normal questions are answered."""
+    from evaluation.dataset import load_dataset
+
+    triggered = [i.id for i in load_dataset() if is_overview_question(i.question)]
+    assert triggered == []
+
+
+class StoreStub:
+    def __init__(self, chunks_by_source: dict[str, list]) -> None:
+        self.by_source = chunks_by_source
+
+    def documents(self) -> dict[str, str]:
+        return {f"id-{s}": s for s in self.by_source}
+
+    def chunks_for_source(self, source: str):
+        return self.by_source[source]
+
+
+def overview_generator(reply: str, sources: dict[str, list[str]]):
+    retriever = FakeRetriever([])  # search finds nothing, as for real overview questions
+    retriever.store = StoreStub({
+        s: [result(i, t, source=s, page=1).chunk for i, t in enumerate(texts)]
+        for s, texts in sources.items()
+    })
+    llm = FakeLLM(reply)
+    return AnswerGenerator(retriever, llm), llm, retriever
+
+
+def test_overview_of_the_selected_document_uses_its_opening() -> None:
+    gen, llm, retriever = overview_generator(
+        "The paper presents resume screening with NLP [1].",
+        {"paper.pdf": ["Title: Resume screening with NLP. Abstract ...", "1. Introduction ..."],
+         "other.pdf": ["Unrelated"]},
+    )
+    ans = gen.answer("what is it about", sources=["paper.pdf"])
+    assert ans.status == "answered" and ans.mode == "overview"
+    assert ans.citations[0].source == "paper.pdf"
+    user_msg = llm.messages[0][1]["content"]
+    assert "Resume screening with NLP" in user_msg and "1. Introduction" in user_msg
+    assert "Unrelated" not in user_msg and "at most five sentences" in user_msg
+    assert retriever.kwargs == {}  # search was not used
+
+
+def test_overview_with_a_single_indexed_document_needs_no_filter() -> None:
+    gen, _, _ = overview_generator("It is about X [1].", {"only.pdf": ["About X."]})
+    assert gen.answer("Summarize it").mode == "overview"
+
+
+def test_ambiguous_overview_falls_back_to_search_with_a_hint() -> None:
+    gen, llm, _ = overview_generator("x", {"a.pdf": ["A"], "b.pdf": ["B"]})
+    ans = gen.answer("what is it about")
+    assert ans.status == "not_found" and ans.warnings == [OVERVIEW_HINT]
+    assert llm.messages == []
+
+
+def test_overview_context_is_capped() -> None:
+    gen, llm, _ = overview_generator("Summary [1].", {"long.pdf": ["x" * 1500] * 10})
+    gen.answer("summary of the document")
+    assert llm.messages[0][1]["content"].count("[") <= 3 + 1  # 4000 chars -> at most 3 chunks
+
+
+def test_uncited_overview_lists_the_passages_it_was_given() -> None:
+    gen, _, _ = overview_generator("It is a paper about resume screening.",
+                                   {"paper.pdf": ["Title and abstract", "Introduction"]})
+    ans = gen.answer("what is it about")
+    assert [c.number for c in ans.citations] == [1, 2]
+    assert ans.warnings == []

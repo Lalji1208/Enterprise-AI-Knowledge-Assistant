@@ -48,6 +48,8 @@ class VectorStore:
         self._chunks: dict[int, Chunk] = {}
         self._ids_by_chunk_id: dict[str, int] = {}
         self._next_id = 0
+        # Bumped on every change, so derived indexes (keyword search) know to rebuild.
+        self.version = 0
         # FAISS is not safe for concurrent writes; the API (Phase 10) may call us from threads.
         self._lock = threading.RLock()
 
@@ -76,6 +78,7 @@ class VectorStore:
                 self._chunks[int_id] = chunks[i]
                 self._ids_by_chunk_id[chunks[i].chunk_id] = int_id
             self._next_id += len(keep)
+            self.version += 1
             return len(keep)
 
     def remove_document(self, doc_id: str) -> int:
@@ -86,6 +89,7 @@ class VectorStore:
                 self._index.remove_ids(np.array(ids, dtype=np.int64))
                 for i in ids:
                     del self._ids_by_chunk_id[self._chunks.pop(i).chunk_id]
+                self.version += 1
             return len(ids)
 
     # ---------- read ----------
@@ -94,6 +98,26 @@ class VectorStore:
         """{doc_id: source file name} for every indexed document."""
         with self._lock:
             return {c.doc_id: c.source for c in self._chunks.values()}
+
+    def all_chunks(self) -> list[Chunk]:
+        with self._lock:
+            return list(self._chunks.values())
+
+    def similarities(self, query_vector: np.ndarray, chunk_ids: Sequence[str]) -> dict[str, float]:
+        """Exact cosine similarity of the query to specific chunks (from their stored
+        vectors), for candidates found by keyword search rather than by FAISS."""
+        query = np.asarray(query_vector, dtype=np.float32).reshape(-1)
+        with self._lock:
+            return {
+                cid: float(self._index.reconstruct(self._ids_by_chunk_id[cid]) @ query)
+                for cid in chunk_ids if cid in self._ids_by_chunk_id
+            }
+
+    def chunks_for_source(self, source: str) -> list[Chunk]:
+        """All chunks of one file, in document order."""
+        with self._lock:
+            chunks = [c for c in self._chunks.values() if c.source == source]
+        return sorted(chunks, key=lambda c: c.chunk_index)
 
     def document_stats(self) -> list[dict]:
         """Per document: doc_id, source, chunk count and number of pages with text."""

@@ -52,9 +52,21 @@ pytest -m integration
 python scripts/build_index.py
 # 2. Inspect retrieval only (no LLM)
 python scripts/search.py "How many leave days do I get?"
-# 3. Ask for a cited answer (needs OPENAI_API_KEY in .env, or LLM_PROVIDER=ollama)
+# 3. Ask for a cited answer (local Ollama model by default, see below)
 python scripts/ask.py "How many leave days do I get?" --show-sources
 ```
+
+### Local LLM (default, free, offline)
+
+```powershell
+winget install Ollama.Ollama          # then, once:
+ollama pull llama3.2:3b               # 2 GB; set OLLAMA_MODELS to store models elsewhere
+```
+
+`.env`: `LLM_PROVIDER=ollama`, `LLM_MODEL=llama3.2:3b`, `LLM_TIMEOUT_SECONDS=180`.
+To use OpenAI instead: `LLM_PROVIDER=openai`, `LLM_MODEL=gpt-4o-mini` and
+`OPENAI_API_KEY`. In Docker, the API container reaches Ollama on the host through
+`host.docker.internal` (set in `docker-compose.yml`).
 
 ### Web app (API + chat UI)
 
@@ -67,6 +79,10 @@ streamlit run ui/streamlit_app.py     # UI  on http://127.0.0.1:8501
 
 Both listen on this computer only. The UI can upload/delete documents, filter by
 file, and has a *Find passages only* mode that works without an LLM key.
+
+Overview questions ("what is it about?", "summarize this paper") match no single
+passage, so they are answered from the opening pages of the document instead
+(choose it under *Search only in*, or have only one document indexed).
 
 Questions the documents cannot answer return *"I could not find the answer…"*;
 when retrieval finds nothing relevant the LLM is not called at all.
@@ -109,7 +125,7 @@ valid for any chunk size. Thresholds are tuned on **dev**, reported on **test**.
 
 ```powershell
 python scripts/run_experiments.py     # retrieval: chunking + thresholds (~4 min, no LLM)
-python scripts/evaluate_answers.py    # answers & hallucinations (needs LLM credits)
+python scripts/evaluate_answers.py    # answers & hallucinations (~7 min with local llama3.2:3b)
 ```
 
 Retrieval results on the held-out test split (chunk 500 / overlap 50, top_k 5;
@@ -128,9 +144,28 @@ Findings:
 - Thresholds tuned aggressively on dev overfit (test balanced fell to 0.82), so
   the more lenient values were kept. The dataset is small (6 unanswerable
   questions per split); treat differences of one question (~0.17) with care.
-- Remaining failure: *bereavement leave* retrieves the annual-leave passage with
-  a positive rerank score - topically adjacent questions must be caught by the
-  LLM's "not found" rule (measured by `evaluate_answers.py`).
+- Remaining retrieval failure: *bereavement leave* retrieves the annual-leave
+  passage with a positive rerank score. The LLM's "not found" rule catches it
+  (see answer results below).
+
+Answer results, all 56 questions, local `llama3.2:3b` via Ollama on a 2-core
+laptop CPU, ~7.5 s per answer, no cost
+([`evaluation/reports/answer_eval.md`](evaluation/reports/answer_eval.md)):
+
+| metric | value |
+|---|---|
+| hallucination rate (unanswerable questions answered) | **0%** |
+| prompt-injection resistance | **100%** |
+| status accuracy (answer vs. "not found") | 95% |
+| answer accuracy (expected facts present) | 89% |
+| citation precision | 95% |
+| false refusals / uncited answers | 7% / 10% |
+
+Two repeated runs gave identical answers for 55 of 56 questions (about +/-2
+points of noise). Two attempted improvements were measured and rejected: keeping
+whole sentences in chunk overlaps (retrieval balanced 0.92 -> 0.89) and adding a
+format example to the prompt (answer accuracy 91% -> 80%). `llama3.2:1b` was
+~2x faster but refused every answerable question in a 6-question trial.
 - Building the corpus exposed a cleaner bug ("Part-time" became "Parttime");
   line-end hyphens are now only removed when the joined word occurs elsewhere
   in the document.
@@ -147,7 +182,7 @@ Findings:
 - [x] Phase 7 — Reranking (`rag/reranker.py`, enable with `RERANKING_ENABLED=true`)
 - [x] Phase 8–9 — LLM generation & citations (`rag/generator.py`, `python scripts/ask.py "question"`)
 - [x] Phase 10–11 — FastAPI backend & Streamlit UI (`app/main.py`, `ui/streamlit_app.py`)
-- [x] Phase 13–15 — Evaluation, hallucination tests, experiments (`evaluation/`; live LLM run pending)
+- [x] Phase 13–15 — Evaluation, hallucination tests, experiments (`evaluation/`)
 - [x] Phase 21–23 — Tests (170, 96% coverage), Docker, CI (`Dockerfile`, `.github/workflows/ci.yml`)
 
 ## Author

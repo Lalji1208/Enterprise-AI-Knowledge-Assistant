@@ -26,6 +26,9 @@ class Answer(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
     # Grounding checks (Phase 9). Warnings are shown to users, never hidden.
     warnings: list[str] = Field(default_factory=list)
+    # "retrieval": passages found by search; "overview": the opening of one document,
+    # used for questions like "what is this paper about?"
+    mode: Literal["retrieval", "overview"] = "retrieval"
     model: str | None = None
     retrieved_count: int = 0       # chunks retrieved before context selection
     prompt_tokens: int | None = None

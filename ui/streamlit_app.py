@@ -27,6 +27,9 @@ def get_client(base_url: str) -> ApiClient:
 
 
 def render_answer(payload: dict) -> None:
+    overview = payload.get("mode") == "overview"
+    if overview:
+        st.caption("Summary based on the document's opening pages")
     st.markdown(payload["answer"])
     for warning in payload.get("warnings", []):
         st.warning(warning)
@@ -36,9 +39,10 @@ def render_answer(payload: dict) -> None:
         for c in citations:
             with st.expander(f"[{c['number']}] {c['source']} — page {c['page_number']}"):
                 st.write(c["text"])
-                rerank = c.get("rerank_score")
-                st.caption(f"similarity {c['score']:.3f}"
-                           + (f" · rerank {rerank:.2f}" if rerank is not None else ""))
+                if not overview:  # overview passages are chosen by position, not scored
+                    rerank = c.get("rerank_score")
+                    st.caption(f"similarity {c['score']:.3f}"
+                               + (f" · rerank {rerank:.2f}" if rerank is not None else ""))
 
 
 def render_passages(payload: dict) -> None:

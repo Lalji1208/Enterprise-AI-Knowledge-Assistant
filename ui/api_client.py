@@ -9,7 +9,7 @@ from typing import Any
 import requests
 
 DEFAULT_TIMEOUT = 30          # seconds
-ASK_TIMEOUT = 120             # LLM answers can be slow
+ASK_TIMEOUT = 300             # local CPU models can take minutes
 UPLOAD_TIMEOUT = 600          # large documents take a while to embed
 
 

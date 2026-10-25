@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     # lower so that relevant passages with modest similarity still reach the reranker,
     # which does the real filtering (see evaluation/reports/retrieval_experiments.md).
     rerank_first_stage_min_score: float = 0.15
+    # Hybrid search (with reranking only): add the best keyword (BM25) matches to the
+    # reranker's candidates, so exact names, codes and e-mail addresses are found even
+    # when their embedding similarity is near zero.
+    keyword_search_enabled: bool = True
+    keyword_candidates: int = Field(default=10, ge=0)
 
     # --- Storage ---
     documents_dir: Path = Path("data/documents")

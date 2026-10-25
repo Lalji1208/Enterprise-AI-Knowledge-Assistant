@@ -24,7 +24,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from evaluation.dataset import EvalItem
+from models.search import RetrievedChunk
 from rag.embedder import Embedder
+from rag.keyword_index import KeywordIndex
 from rag.reranker import Reranker
 from rag.retriever import Retriever
 from rag.vector_store import VectorStore
@@ -38,6 +40,8 @@ class Candidate:
     score: float
     rerank_score: float | None
     relevant: bool
+    in_dense: bool = True   # among the embedding-search candidates
+    keyword: bool = False   # among the keyword (BM25) candidates (hybrid search)
 
 
 @dataclass
@@ -81,13 +85,25 @@ def collect_records(
     items: Sequence[EvalItem],
     reranker: Reranker | None = None,
     pool_size: int = 20,
+    keyword_candidates: int = 10,
 ) -> list[QuestionRecord]:
-    """Run retrieval with all thresholds disabled and record every candidate."""
+    """Run retrieval with all thresholds disabled and record every candidate: the
+    embedding pool plus (with a reranker) the keyword matches hybrid search would add."""
     first_stage = Retriever(store, embedder, top_k=pool_size, min_score=None)
+    keyword_index = KeywordIndex(store.all_chunks()) if reranker and keyword_candidates else None
     records = []
     for item in items:
         start = time.perf_counter()
         pool = first_stage.retrieve(item.question)
+        dense_ids = {r.chunk.chunk_id for r in pool}
+        keyword_ids: set[str] = set()
+        if keyword_index is not None:
+            hits = [c for c, _ in keyword_index.search(item.question, keyword_candidates)]
+            keyword_ids = {c.chunk_id for c in hits}
+            extra = [c for c in hits if c.chunk_id not in dense_ids]
+            sims = store.similarities(embedder.embed_query(item.question),
+                                      [c.chunk_id for c in extra])
+            pool += [RetrievedChunk(chunk=c, score=sims[c.chunk_id]) for c in extra]
         if reranker is not None:
             pool = reranker.rerank(item.question, pool)
             pool.sort(key=lambda r: r.score, reverse=True)  # keep bi-encoder order
@@ -96,7 +112,9 @@ def collect_records(
             item_id=item.id, split=item.split, category=item.category,
             answerable=item.answerable, latency_ms=latency,
             candidates=[Candidate(r.chunk.chunk_id, r.chunk.source, r.chunk.page_number,
-                                  r.score, r.rerank_score, item.is_relevant(r.chunk))
+                                  r.score, r.rerank_score, item.is_relevant(r.chunk),
+                                  in_dense=r.chunk.chunk_id in dense_ids,
+                                  keyword=r.chunk.chunk_id in keyword_ids)
                         for r in pool],
         ))
     return records
@@ -108,9 +126,15 @@ def replay(
     min_score: float | None,
     rerank_min_score: float | None = None,
     use_rerank: bool = False,
+    use_keyword: bool = False,
 ) -> list[Candidate]:
-    """What the production retriever would return for this question."""
-    kept = [c for c in record.candidates if min_score is None or c.score >= min_score]
+    """What the production retriever would return for this question. With
+    `use_keyword` (hybrid search, reranking only), keyword matches join the pool and
+    skip the similarity cutoff."""
+    hybrid = use_keyword and use_rerank
+    pool = [c for c in record.candidates if c.in_dense or (hybrid and c.keyword)]
+    kept = [c for c in pool
+            if min_score is None or c.score >= min_score or (hybrid and c.keyword)]
     if use_rerank:
         kept = sorted(kept, key=lambda c: c.rerank_score, reverse=True)  # stable
         kept = [c for c in kept if rerank_min_score is None or c.rerank_score >= rerank_min_score]
@@ -124,12 +148,13 @@ def score_records(
     rerank_min_score: float | None = None,
     use_rerank: bool = False,
     ks: Sequence[int] = (1, 3, 5),
+    use_keyword: bool = False,
 ) -> RetrievalMetrics:
     m = RetrievalMetrics()
     hits = {k: 0 for k in ks}
     reciprocal_ranks, false_abstain, correct_abstain = 0.0, 0, 0
     for rec in records:
-        returned = replay(rec, top_k, min_score, rerank_min_score, use_rerank)
+        returned = replay(rec, top_k, min_score, rerank_min_score, use_rerank, use_keyword)
         if rec.answerable:
             m.n_answerable += 1
             rank = next((i for i, c in enumerate(returned, start=1) if c.relevant), None)
@@ -163,11 +188,12 @@ def sweep(
     rerank_min_scores: Sequence[float | None] = (None,),
     use_rerank: bool = False,
     top_k: int = 5,
+    use_keyword: bool = False,
 ) -> list[tuple[float | None, float | None, RetrievalMetrics]]:
     """Score every threshold combination; best balanced score first.
     Ties prefer more lenient thresholds (fewer false abstentions)."""
     rows = [
-        (s, r, score_records(records, top_k, s, r, use_rerank))
+        (s, r, score_records(records, top_k, s, r, use_rerank, use_keyword=use_keyword))
         for s in min_scores
         for r in (rerank_min_scores if use_rerank else (None,))
     ]

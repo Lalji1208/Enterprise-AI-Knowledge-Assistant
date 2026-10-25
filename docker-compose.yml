@@ -16,6 +16,11 @@ services:
     environment:
       DOCUMENTS_DIR: /app/data/documents
       PROCESSED_DIR: /app/data/processed
+      # With LLM_PROVIDER=ollama: reach Ollama running on the host computer
+      # ("localhost" inside a container is the container itself).
+      OLLAMA_BASE_URL: http://host.docker.internal:11434/v1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # needed on Linux; Docker Desktop has it built in
     volumes:
       - ./data:/app/data
     ports:

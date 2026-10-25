@@ -249,3 +249,20 @@ def test_experiment_pipeline_and_reports(tmp_path: Path) -> None:
     summary = json.loads(js.read_text(encoding="utf-8"))
     assert summary["dataset"]["items"] == result["dataset"]["items"] and "records" not in summary
     assert (tmp_path / "reports" / "retrieval_experiments_records.json").is_file()
+
+
+def test_replay_hybrid_keyword_candidates_skip_similarity_cutoff_only() -> None:
+    record = QuestionRecord(
+        item_id="n1", split="dev", category="exact_term", answerable=True, latency_ms=1.0,
+        candidates=[
+            Candidate("dense", "s", 1, 0.40, -9.0, False),
+            Candidate("kw", "s", 1, 0.02, 1.5, True, in_dense=False, keyword=True),
+            Candidate("kw-weak", "s", 1, 0.01, -9.5, False, in_dense=False, keyword=True),
+        ],
+    )
+    plain = replay(record, 5, 0.15, -6.0, use_rerank=True)
+    hybrid = replay(record, 5, 0.15, -6.0, use_rerank=True, use_keyword=True)
+    assert [c.chunk_id for c in plain] == []           # dense candidate fails the reranker
+    assert [c.chunk_id for c in hybrid] == ["kw"]      # keyword hit passes; weak one doesn't
+    # Without a reranker, keyword candidates are never used.
+    assert [c.chunk_id for c in replay(record, 5, 0.15, use_keyword=True)] == ["dense"]
