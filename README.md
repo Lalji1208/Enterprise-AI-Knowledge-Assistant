@@ -188,8 +188,11 @@ format example to the prompt (answer accuracy 91% -> 80%). `llama3.2:1b` was
 - [x] Phase 7 — Reranking (`rag/reranker.py`, enable with `RERANKING_ENABLED=true`)
 - [x] Phase 8–9 — LLM generation & citations (`rag/generator.py`, `python scripts/ask.py "question"`)
 - [x] Phase 10–11 — FastAPI backend & Streamlit UI (`app/main.py`, `ui/streamlit_app.py`)
+- [x] Phase 12 — Local LLM via Ollama (`llama3.2:3b`; free, offline, switchable to OpenAI)
 - [x] Phase 13–15 — Evaluation, hallucination tests, experiments (`evaluation/`)
-- [x] Phase 21–23 — Tests (170, 96% coverage), Docker, CI (`Dockerfile`, `.github/workflows/ci.yml`)
+- [x] Phase 16–20 — Improvements from real use: hybrid keyword search (`rag/keyword_index.py`),
+  document overview mode, upload validation and localhost-only binding
+- [x] Phase 21–23 — Tests (193, 96% coverage), Docker, CI (`Dockerfile`, `.github/workflows/ci.yml`)
 
 ## Author
 

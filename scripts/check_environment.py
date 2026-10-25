@@ -24,7 +24,6 @@ REQUIRED_PACKAGES: list[tuple[str, str]] = [
     ("pydantic_settings", "pydantic-settings"),
     ("pypdf", "pypdf"),
     ("numpy", "numpy"),
-    ("sklearn", "scikit-learn"),
     ("torch", "torch"),
     ("sentence_transformers", "sentence-transformers"),
     ("faiss", "faiss-cpu"),

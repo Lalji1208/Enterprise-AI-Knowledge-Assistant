@@ -7,7 +7,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 EXPECTED_PACKAGES = [
     "app", "api", "rag", "evaluation", "models",
-    "database", "services", "config",
+    "services", "config",
 ]
 
 

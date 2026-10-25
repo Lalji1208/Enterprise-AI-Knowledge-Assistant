@@ -12,9 +12,8 @@ pydantic-settings>=2.2      # typed settings read from environment variables
 # --- Document parsing (Phase 1) ------------------------------
 pypdf>=4.0                  # pure-Python PDF text extraction
 
-# --- Embeddings & ML (Phases 4, 7, 16) -----------------------
+# --- Embeddings & ML (Phases 4, 7) --------------------------
 sentence-transformers>=2.7  # embedding + cross-encoder models (installs PyTorch)
-scikit-learn>=1.4           # TF-IDF, logistic regression, metrics
 numpy>=1.26
 
 # --- Vector search (Phase 5) ---------------------------------

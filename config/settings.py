@@ -64,7 +64,6 @@ class Settings(BaseSettings):
     # --- Storage ---
     documents_dir: Path = Path("data/documents")
     processed_dir: Path = Path("data/processed")
-    database_url: str = "sqlite:///data/processed/app.db"
 
     # --- Upload limits ---
     max_upload_size_mb: int = Field(default=20, gt=0)
