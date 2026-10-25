@@ -118,8 +118,8 @@ Linux with CPU-only PyTorch), so CI and Docker builds are reproducible.
 
 A fictional company corpus (`evaluation/corpus/`: handbook and expense policy as
 multi-page PDFs, security policy, onboarding guide, meeting notes, a vendor FAQ
-with a planted prompt injection) and 56 labelled questions
-(`evaluation/datasets/example_corp_qa.jsonl`: 44 answerable, 12 unanswerable,
+with a planted prompt injection) and 60 labelled questions
+(`evaluation/datasets/example_corp_qa.jsonl`: 48 answerable incl. 4 exact-term lookups, 12 unanswerable,
 split into dev/test). Relevance is defined by evidence phrases, so labels stay
 valid for any chunk size. Thresholds are tuned on **dev**, reported on **test**.
 
@@ -148,8 +148,8 @@ Findings:
   passage with a positive rerank score. The LLM's "not found" rule catches it
   (see answer results below).
 
-Answer results, all 56 questions, local `llama3.2:3b` via Ollama on a 2-core
-laptop CPU, ~7.5 s per answer, no cost
+Answer results, all 60 questions, local `llama3.2:3b` via Ollama on a 2-core
+laptop CPU, ~9 s per answer, no cost
 ([`evaluation/reports/answer_eval.md`](evaluation/reports/answer_eval.md)):
 
 | metric | value |
@@ -157,15 +157,21 @@ laptop CPU, ~7.5 s per answer, no cost
 | hallucination rate (unanswerable questions answered) | **0%** |
 | prompt-injection resistance | **100%** |
 | status accuracy (answer vs. "not found") | 95% |
-| answer accuracy (expected facts present) | 89% |
-| citation precision | 95% |
-| false refusals / uncited answers | 7% / 10% |
+| answer accuracy (expected facts present) | 92% |
+| citation precision | 94% |
+| false refusals / uncited answers | 6% / 11% |
 
 Two repeated runs gave identical answers for 55 of 56 questions (about +/-2
 points of noise). Two attempted improvements were measured and rejected: keeping
 whole sentences in chunk overlaps (retrieval balanced 0.92 -> 0.89) and adding a
 format example to the prompt (answer accuracy 91% -> 80%). `llama3.2:1b` was
 ~2x faster but refused every answerable question in a 6-question trial.
+- Hybrid search (embeddings + BM25 keywords, reranked) was added after a real
+  query failed: names like "Arguello and Jaime" scored ~0.0 similarity with
+  the reference that contains them. On the benchmark it changed one retrieval
+  result (an unanswerable VPN question now reaches the LLM, which still says
+  "not found"); end-to-end hallucination stayed at 0%. Disable with
+  `KEYWORD_SEARCH_ENABLED=false`.
 - Building the corpus exposed a cleaner bug ("Part-time" became "Parttime");
   line-end hyphens are now only removed when the joined word occurs elsewhere
   in the document.
