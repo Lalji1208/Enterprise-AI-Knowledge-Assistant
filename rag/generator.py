@@ -19,10 +19,13 @@ Usage:
 """
 
 import re
+from collections.abc import Sequence
 
 from config.settings import Settings, get_settings
 from models.answer import Answer, Citation
 from models.search import RetrievedChunk
+from rag.citations import add_citations
+from rag.conversation import Turn, needs_rewrite, rewrite_question
 from rag.llm import LLMClient, get_llm
 from rag.prompts import NOT_FOUND_ANSWER, build_messages, select_context
 from rag.retriever import Retriever
@@ -101,34 +104,54 @@ def build_citations(numbers: list[int], context: list[RetrievedChunk]) -> list[C
 
 
 class AnswerGenerator:
-    def __init__(self, retriever: Retriever, llm: LLMClient, max_context_chars: int = 8000) -> None:
+    def __init__(
+        self,
+        retriever: Retriever,
+        llm: LLMClient,
+        max_context_chars: int = 8000,
+        rewrite_follow_ups: bool = True,
+        history_turns: int = 3,
+    ) -> None:
         self.retriever = retriever
         self.llm = llm
         self.max_context_chars = max_context_chars
+        self.rewrite_follow_ups = rewrite_follow_ups
+        self.history_turns = history_turns
 
     @classmethod
     def from_settings(cls, settings: Settings | None = None) -> "AnswerGenerator":
         settings = settings or get_settings()
-        return cls(Retriever.from_settings(settings), get_llm(), settings.max_context_chars)
+        return cls(Retriever.from_settings(settings), get_llm(), settings.max_context_chars,
+                   settings.rewrite_follow_ups, settings.history_turns)
 
-    def answer(self, question: str, **retrieve_kwargs) -> Answer:
-        """Answer from the indexed documents. Extra kwargs go to Retriever.retrieve
-        (top_k, sources, ...). Raises RetrievalError / LLMError on failure."""
+    def answer(
+        self, question: str, history: Sequence[Turn] | None = None, **retrieve_kwargs
+    ) -> Answer:
+        """Answer from the indexed documents. `history` holds earlier turns of a chat
+        ({"question", "answer"}); a follow-up is rewritten into a standalone question
+        before retrieval. Extra kwargs go to Retriever.retrieve (top_k, sources, ...).
+        Raises RetrievalError / LLMError on failure."""
         question = question.strip()
+        history = list(history or [])[-self.history_turns:] if self.history_turns else []
+        searched = question
         overview_source = self._overview_source(question, retrieve_kwargs.get("sources"))
+        if overview_source is None and self.rewrite_follow_ups and needs_rewrite(question, history):
+            searched = rewrite_question(self.llm, question, history)
+        rewritten = searched if searched != question else None
+
         if overview_source is not None:
             opening = [RetrievedChunk(chunk=c, score=0.0)
                        for c in self.retriever.store.chunks_for_source(overview_source)]
             results = select_context(opening, OVERVIEW_CONTEXT_CHARS)
             context, prompt_question, mode = results, f"{question}\n{OVERVIEW_INSTRUCTION}", "overview"
         else:
-            results = self.retriever.retrieve(question, **retrieve_kwargs)
+            results = self.retriever.retrieve(searched, **retrieve_kwargs)
             if not results:
                 hint = [OVERVIEW_HINT] if is_overview_question(question) else []
                 return Answer(question=question, answer=NOT_FOUND_ANSWER, status="not_found",
-                              warnings=hint)
+                              warnings=hint, searched_question=rewritten)
             context = select_context(results, self.max_context_chars)
-            prompt_question, mode = question, "retrieval"
+            prompt_question, mode = searched, "retrieval"
 
         reply = self.llm.complete(build_messages(prompt_question, context))
         text = reply.text
@@ -140,6 +163,7 @@ class AnswerGenerator:
             "prompt_tokens": reply.prompt_tokens,
             "completion_tokens": reply.completion_tokens,
             "mode": mode,
+            "searched_question": rewritten,
         }
 
         if not text:
@@ -160,7 +184,14 @@ class AnswerGenerator:
             # summary's sources even when it wrote no [n] markers (small models often don't).
             cited_valid = sorted(valid)
         elif not cited_valid:
-            warnings.append("The answer does not cite any source; verify it before relying on it.")
+            # Small models often omit the [n] markers: attach a citation to each sentence
+            # a passage clearly supports (content words + every number); never guess.
+            text, cited_valid = add_citations(text, context)
+            if cited_valid:
+                base["auto_cited"] = True
+            else:
+                warnings.append(
+                    "The answer does not cite any source; verify it before relying on it.")
         if reply.truncated:
             warnings.append("The answer was cut off at the length limit (LLM_MAX_TOKENS).")
 

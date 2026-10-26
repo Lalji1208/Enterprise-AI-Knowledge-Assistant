@@ -29,6 +29,11 @@ class Answer(BaseModel):
     # "retrieval": passages found by search; "overview": the opening of one document,
     # used for questions like "what is this paper about?"
     mode: Literal["retrieval", "overview"] = "retrieval"
+    # Set when a follow-up was rewritten into this standalone question for retrieval.
+    searched_question: str | None = None
+    # True when the model wrote no [n] markers and citations were attached by matching
+    # each sentence to the passage that supports it (rag/citations.py).
+    auto_cited: bool = False
     model: str | None = None
     retrieved_count: int = 0       # chunks retrieved before context selection
     prompt_tokens: int | None = None

@@ -94,8 +94,9 @@ def fake_api(monkeypatch):
     monkeypatch.setattr(ApiClient, "health", lambda self: state["health"])
     monkeypatch.setattr(ApiClient, "documents", lambda self: state["docs"])
 
-    def ask(self, question, top_k=None, sources=None):
+    def ask(self, question, top_k=None, sources=None, history=None):
         state["last_ask"] = (question, top_k, sources)
+        state["last_history"] = history
         if state["ask_error"]:
             raise state["ask_error"]
         return state["ask"]
@@ -154,3 +155,21 @@ def test_app_llm_unavailable_suggests_passage_mode(fake_api) -> None:
     at.chat_input[0].set_value("question").run()
     assert not at.exception
     assert "no credits" in at.error[0].value and "Find passages only" in at.error[0].value
+
+
+def test_app_sends_previous_turns_as_history(fake_api) -> None:
+    at = run_app()
+    at.chat_input[0].set_value("Which classifiers are used?").run()
+    assert fake_api["last_history"] == []  # first question: no history
+    at.chat_input[0].set_value("Which of them was better?").run()
+    assert not at.exception
+    assert fake_api["last_history"] == [
+        {"question": "Which classifiers are used?", "answer": ANSWER["answer"]}
+    ]
+
+
+def test_app_shows_the_rewritten_question(fake_api) -> None:
+    fake_api["ask"] = {**ANSWER, "searched_question": "Which classifier was more accurate?"}
+    at = run_app()
+    at.chat_input[0].set_value("Which was better?").run()
+    assert any("Searched for: Which classifier was more accurate?" in c.value for c in at.caption)

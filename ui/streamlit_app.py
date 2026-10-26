@@ -9,6 +9,7 @@ API_URL (env var) points the UI at the backend; default http://127.0.0.1:8000.
 
 import os
 import sys
+from itertools import pairwise
 from pathlib import Path
 
 import streamlit as st
@@ -19,6 +20,7 @@ from ui.api_client import ApiClient, ApiError
 
 MODE_ANSWER = "Answer with citations (LLM)"
 MODE_SEARCH = "Find passages only (no LLM)"
+HISTORY_TURNS = 3  # earlier exchanges sent along so follow-up questions can be understood
 
 
 @st.cache_resource
@@ -30,7 +32,11 @@ def render_answer(payload: dict) -> None:
     overview = payload.get("mode") == "overview"
     if overview:
         st.caption("Summary based on the document's opening pages")
+    if payload.get("searched_question"):
+        st.caption(f"Searched for: {payload['searched_question']}")
     st.markdown(payload["answer"])
+    if payload.get("auto_cited"):
+        st.caption("Citations added automatically by matching each sentence to its passage")
     for warning in payload.get("warnings", []):
         st.warning(warning)
     citations = payload.get("citations", [])
@@ -58,6 +64,16 @@ def render_passages(payload: dict) -> None:
             rerank = r.get("rerank_score")
             st.caption(f"similarity {r['score']:.3f}"
                        + (f" · rerank {rerank:.2f}" if rerank is not None else ""))
+
+
+def chat_history(messages: list[dict], max_turns: int = HISTORY_TURNS) -> list[dict]:
+    """The last question/answer pairs of the chat, oldest first."""
+    turns = [
+        {"question": prev["content"], "answer": nxt["payload"]["answer"]}
+        for prev, nxt in pairwise(messages)
+        if prev["role"] == "user" and nxt.get("kind") == "answer"
+    ]
+    return turns[-max_turns:]
 
 
 def render_message(message: dict) -> None:
@@ -159,6 +175,7 @@ def main() -> None:
     if not question:
         return
 
+    history = chat_history(st.session_state.messages)
     user_message = {"role": "user", "content": question}
     st.session_state.messages.append(user_message)
     render_message(user_message)
@@ -170,7 +187,8 @@ def main() -> None:
                          "payload": client.search(question, top_k=top_k, sources=sources)}
             else:
                 reply = {"role": "assistant", "kind": "answer",
-                         "payload": client.ask(question, top_k=top_k, sources=sources)}
+                         "payload": client.ask(question, top_k=top_k, sources=sources,
+                                               history=history)}
         except ApiError as exc:
             hint = " Try 'Find passages only' mode." if exc.status == 503 else ""
             reply = {"role": "assistant", "kind": "error", "content": exc.message + hint}

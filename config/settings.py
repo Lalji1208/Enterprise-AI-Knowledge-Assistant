@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(default=60.0, gt=0)
     # Cap on retrieved text sent to the LLM (controls cost and context size).
     max_context_chars: int = Field(default=8000, gt=0)
+    # Chat follow-ups ("And its accuracy?") are rewritten into standalone questions
+    # using the last HISTORY_TURNS exchanges before retrieval (one extra LLM call).
+    rewrite_follow_ups: bool = True
+    history_turns: int = Field(default=3, ge=0)
 
     # --- Embeddings ---
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"

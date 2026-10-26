@@ -46,6 +46,8 @@ class EvalItem(BaseModel):
     evidence: list[Evidence] = Field(default_factory=list)
     answer_keywords: list[list[str]] = Field(default_factory=list)
     must_not_contain: list[str] = Field(default_factory=list)
+    # Earlier chat turns [{"question", "answer"}] for follow-up questions.
+    history: list[dict[str, str]] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check_consistency(self) -> "EvalItem":

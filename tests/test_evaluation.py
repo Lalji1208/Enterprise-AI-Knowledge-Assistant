@@ -151,7 +151,7 @@ class ScriptedGenerator:
     def __init__(self, answers: dict[str, Answer]) -> None:
         self.answers = answers
 
-    def answer(self, question: str) -> Answer:
+    def answer(self, question: str, history=None) -> Answer:
         return self.answers[question]
 
 
@@ -211,7 +211,7 @@ def test_provider_errors_propagate() -> None:
     from rag.llm import LLMError
 
     class Broken:
-        def answer(self, question):
+        def answer(self, question, history=None):
             raise LLMError("no credits")
 
     with pytest.raises(LLMError):

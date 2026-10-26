@@ -94,7 +94,8 @@ def search(body: QueryRequest, request: Request) -> dict:
 @router.post("/ask", response_model=AskResponse, responses=ERRORS)
 def ask(body: AskRequest, request: Request):
     try:
-        return service(request).ask(body.question, top_k=body.top_k, sources=body.sources)
+        return service(request).ask(body.question, top_k=body.top_k, sources=body.sources,
+                                    history=[t.model_dump() for t in body.history])
     except RetrievalError as exc:
         raise HTTPException(400, str(exc)) from exc
     except LLMError as exc:

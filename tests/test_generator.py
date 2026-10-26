@@ -139,7 +139,8 @@ def test_hallucinated_citation_is_removed_and_flagged() -> None:
 
 
 def test_uncited_answer_is_flagged() -> None:
-    gen, _, _ = generator("You get twenty days.")
+    # No passage supports this sentence, so no citation can be attached automatically.
+    gen, _, _ = generator("Parking is free for all visitors.")
     ans = gen.answer("q")
     assert ans.status == "answered" and not ans.is_grounded
     assert any("does not cite" in w for w in ans.warnings)

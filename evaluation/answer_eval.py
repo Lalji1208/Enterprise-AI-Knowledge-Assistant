@@ -20,7 +20,7 @@ from models.answer import Answer, Citation
 
 
 class AnswersQuestions(Protocol):
-    def answer(self, question: str) -> Answer: ...
+    def answer(self, question: str, history=None) -> Answer: ...
 
 
 @dataclass
@@ -82,7 +82,8 @@ def score_answer(item: EvalItem, answer: Answer) -> AnswerResult:
 def run_answer_eval(generator: AnswersQuestions, items: Sequence[EvalItem]) -> list[AnswerResult]:
     """Ask every question. Provider errors (e.g. no credit) propagate immediately,
     rather than being silently scored as wrong answers."""
-    return [score_answer(item, generator.answer(item.question)) for item in items]
+    return [score_answer(item, generator.answer(item.question, history=item.history or None))
+            for item in items]
 
 
 def _mean(values: list[float]) -> float | None:

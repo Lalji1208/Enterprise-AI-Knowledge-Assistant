@@ -209,3 +209,21 @@ def test_safe_filename_accepts(good: str) -> None:
 def test_safe_filename_rejects(bad: str) -> None:
     with pytest.raises(UploadError):
         safe_filename(bad)
+
+
+def test_ask_passes_history_to_the_service(tmp_path: Path) -> None:
+    seen = {}
+
+    class Svc:
+        settings = make_settings(tmp_path)
+
+        def ask(self, question, top_k=None, sources=None, history=None):
+            seen["history"] = history
+            from models.answer import Answer
+            return Answer(question=question, answer="ok", status="not_found")
+
+    with TestClient(create_app(Svc())) as c:
+        r = c.post("/api/ask", json={"question": "And it?",
+                                     "history": [{"question": "Q1", "answer": "A1"}]})
+    assert r.status_code == 200
+    assert seen["history"] == [{"question": "Q1", "answer": "A1"}]

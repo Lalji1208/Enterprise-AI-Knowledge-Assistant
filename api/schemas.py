@@ -12,10 +12,17 @@ class QueryRequest(BaseModel):
     sources: list[str] | None = None  # restrict to these file names
 
 
+class ConversationTurn(BaseModel):
+    question: str = Field(max_length=2000)
+    answer: str = Field(max_length=8000)
+
+
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     top_k: int | None = Field(default=None, ge=1, le=50)
     sources: list[str] | None = None
+    # Earlier turns of the chat, oldest first, so follow-ups can be understood.
+    history: list[ConversationTurn] = Field(default_factory=list, max_length=10)
 
 
 class SearchResponse(BaseModel):

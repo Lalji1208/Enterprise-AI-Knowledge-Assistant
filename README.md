@@ -166,6 +166,9 @@ points of noise). Two attempted improvements were measured and rejected: keeping
 whole sentences in chunk overlaps (retrieval balanced 0.92 -> 0.89) and adding a
 format example to the prompt (answer accuracy 91% -> 80%). `llama3.2:1b` was
 ~2x faster but refused every answerable question in a 6-question trial.
+
+Further findings:
+
 - Hybrid search (embeddings + BM25 keywords, reranked) was added after a real
   query failed: names like "Arguello and Jaime" scored ~0.0 similarity with
   the reference that contains them. On the benchmark it changed one retrieval
@@ -175,6 +178,40 @@ format example to the prompt (answer accuracy 91% -> 80%). `llama3.2:1b` was
 - Building the corpus exposed a cleaner bug ("Part-time" became "Parttime");
   line-end hyphens are now only removed when the joined word occurs elsewhere
   in the document.
+
+### Benchmark on a real document
+
+`evaluation/datasets/research_paper_qa.jsonl` holds 34 questions (26 answerable,
+8 unanswerable) about a real 4-page research paper, and
+`research_paper_followups.jsonl` 12 chat follow-ups. Run any dataset on any folder:
+
+```powershell
+python scripts/evaluate_answers.py --docs data/documents `
+    --dataset evaluation/datasets/research_paper_qa.jsonl --name research_paper
+```
+
+| metric | synthetic corpus (60 Q) | real paper (34 Q) |
+|---|---|---|
+| hallucination rate | 0% | **0%** |
+| answer accuracy | 90% | 77% |
+| false refusals | 6% | 19% |
+| retrieval hit@5 | 1.00 | 0.73 |
+| uncited answers (after auto-citation) | 0% (was 11%) | 0% (was 24%) |
+| citation precision | 96% | 68% |
+
+The real document is much harder: the reranker scores headers, author lists and
+reference lists low, and PDF extraction leaves broken words ("appli cation").
+Looser thresholds did not help on the dev split, so the defaults were kept.
+
+**Chat follow-ups.** Questions such as "Which of them was more accurate?" are
+rewritten into standalone questions from the last three exchanges before search
+(`REWRITE_FOLLOW_UPS`, `HISTORY_TURNS`); the UI shows what was searched. On the
+12 follow-ups, answer accuracy rose from 50% to 70% with no hallucinations.
+
+**Automatic citations.** When the model writes no `[n]` markers, each sentence
+is matched to the passage that contains most of its words and all of its
+numbers (`rag/citations.py`); unmatched sentences stay uncited. 8 of 10
+automatically added citations pointed to the right passage.
 
 ## Project status
 
@@ -192,7 +229,7 @@ format example to the prompt (answer accuracy 91% -> 80%). `llama3.2:1b` was
 - [x] Phase 13–15 — Evaluation, hallucination tests, experiments (`evaluation/`)
 - [x] Phase 16–20 — Improvements from real use: hybrid keyword search (`rag/keyword_index.py`),
   document overview mode, upload validation and localhost-only binding
-- [x] Phase 21–23 — Tests (193, 96% coverage), Docker, CI (`Dockerfile`, `.github/workflows/ci.yml`)
+- [x] Phase 21–23 — Tests (221, 96% coverage), Docker, CI (`Dockerfile`, `.github/workflows/ci.yml`)
 
 ## Author
 

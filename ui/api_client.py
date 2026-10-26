@@ -68,7 +68,7 @@ class ApiClient:
                              json={"query": query, "top_k": top_k, "sources": sources or None})
 
     def ask(self, question: str, top_k: int | None = None,
-            sources: list[str] | None = None) -> dict:
+            sources: list[str] | None = None, history: list[dict] | None = None) -> dict:
         return self._request("POST", "/ask", timeout=ASK_TIMEOUT,
                              json={"question": question, "top_k": top_k,
-                                   "sources": sources or None})
+                                   "sources": sources or None, "history": history or []})

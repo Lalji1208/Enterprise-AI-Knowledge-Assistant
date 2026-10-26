@@ -178,14 +178,19 @@ class AssistantService:
         return self.retriever.retrieve(query, top_k=top_k, sources=sources)
 
     def ask(
-        self, question: str, top_k: int | None = None, sources: Collection[str] | None = None
+        self,
+        question: str,
+        top_k: int | None = None,
+        sources: Collection[str] | None = None,
+        history: list[dict[str, str]] | None = None,
     ) -> Answer:
         if self._generator is None:
             # Raises LLMError (e.g. missing key) without breaking the rest of the app.
             self._generator = AnswerGenerator(
-                self.retriever, self._llm_factory(), self.settings.max_context_chars
+                self.retriever, self._llm_factory(), self.settings.max_context_chars,
+                self.settings.rewrite_follow_ups, self.settings.history_turns,
             )
-        return self._generator.answer(question, top_k=top_k, sources=sources)
+        return self._generator.answer(question, history=history, top_k=top_k, sources=sources)
 
 
 def report_to_dict(report: SyncReport) -> dict:
